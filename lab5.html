@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat App</title>
+</head>
+<body>
+    <script type="application/javascript">
+        // Configuración
+        const API_URL = 'https://chat.nrywhite.lat/chats';
+        const MAX_MESSAGE_LENGTH = 140;
+        const REFRESH_INTERVAL = 5000;
+        
+        // Estado
+        let messages = [];
+        let isDarkMode = localStorage.getItem('darkMode') === 'true';
+        let lastScrollPosition = 0;
+        let isScrolledUp = false;
+        let messageList, inputField, charCounter;
+
+        // Inicialización
+        async function initChat() {
+            createUI();
+            applyTheme();
+            await loadMessages();
+            
+            setInterval(async () => {
+                await loadMessages();
+                preserveScroll();
+            }, REFRESH_INTERVAL);
+        }
+
+        function createUI() {
+            document.body.style.margin = '0';
+            document.body.style.padding = '0';
+            document.body.style.fontFamily = 'Arial, sans-serif';
+            document.body.style.display = 'flex';
+            document.body.style.flexDirection = 'column';
+            document.body.style.height = '100vh';
+            
+            const chatContainer = document.createElement('div');
+            chatContainer.style.display = 'flex';
+            chatContainer.style.flexDirection = 'column';
+            chatContainer.style.height = '100%';
+            document.body.appendChild(chatContainer);
+            
+            const header = document.createElement('div');
+            header.style.padding = '10px';
+            header.style.borderBottom = '1px solid #ddd';
+            header.style.display = 'flex';
+            header.style.justifyContent = 'space-between';
+            header.style.alignItems = 'center';
+            
+            const title = document.createElement('h1');
+            title.textContent = 'Chat JS Only';
+            title.style.margin = '0';
+            title.style.fontSize = '1.5rem';
+            
+            const themeToggle = document.createElement('button');
+            themeToggle.textContent = isDarkMode ? 'Light Mode' : 'Dark Mode';
+            themeToggle.style.padding = '5px 10px';
+            themeToggle.style.borderRadius = '5px';
+            themeToggle.style.border = 'none';
+            themeToggle.style.cursor = 'pointer';
+            themeToggle.addEventListener('click', toggleTheme);
+            
+            header.appendChild(title);
+            header.appendChild(themeToggle);
+            chatContainer.appendChild(header);
+            
+            // Lista de mensajes
+            messageList = document.createElement('div');
+            messageList.style.flex = '1';
+            messageList.style.overflowY = 'auto';
+            messageList.style.padding = '10px';
+            messageList.style.display = 'flex';
+            messageList.style.flexDirection = 'column';
+            messageList.style.gap = '10px';
+            
+            messageList.addEventListener('scroll', () => {
+                const { scrollTop, scrollHeight, clientHeight } = messageList;
+                lastScrollPosition = scrollTop;
+                isScrolledUp = scrollTop + clientHeight < scrollHeight - 50;
+            });
+            
+            chatContainer.appendChild(messageList);
+            
+            const inputContainer = document.createElement('div');
+            inputContainer.style.padding = '10px';
+            inputContainer.style.borderTop = '1px solid #ddd';
+            inputContainer.style.display = 'flex';
+            inputContainer.style.flexDirection = 'column';
+            inputContainer.style.gap = '5px';
+            
+            const inputWrapper = document.createElement('div');
+            inputWrapper.style.display = 'flex';
+            inputWrapper.style.gap = '5px';
+            
+            inputField = document.createElement('input');
+            inputField.type = 'text';
+            inputField.placeholder = 'Write your message';
+            inputField.style.flex = '1';
+            inputField.style.padding = '8px';
+            inputField.style.borderRadius = '5px';
+            inputField.style.border = '1px solid #ddd';
+            
+            inputField.addEventListener('input', updateCharCounter);
+            inputField.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter' && inputField.value.trim()) sendMessage();
+            });
+            
+            const sendButton = document.createElement('button');
+            sendButton.textContent = 'Send';
+            sendButton.style.padding = '8px 15px';
+            sendButton.style.borderRadius = '5px';
+            sendButton.style.border = 'none';
+            sendButton.style.cursor = 'pointer';
+            sendButton.addEventListener('click', sendMessage);
+            
+            inputWrapper.appendChild(inputField);
+            inputWrapper.appendChild(sendButton);
+            inputContainer.appendChild(inputWrapper);
+            
+
+            charCounter = document.createElement('div');
+            charCounter.style.fontSize = '0.8rem';
+            charCounter.style.textAlign = 'right';
+            charCounter.style.color = '#666';
+            updateCharCounter();
+            inputContainer.appendChild(charCounter);
+            
+            chatContainer.appendChild(inputContainer);
+        }
+
+        function updateCharCounter() {
+            const length = Math.min(inputField.value.length, MAX_MESSAGE_LENGTH);
+            charCounter.textContent = `${length}/${MAX_MESSAGE_LENGTH}`;
+            charCounter.style.color = length >= MAX_MESSAGE_LENGTH ? 'red' : '#666';
+            
+            if (inputField.value.length > MAX_MESSAGE_LENGTH) {
+                inputField.value = inputField.value.substring(0, MAX_MESSAGE_LENGTH);
+            }
+        }
+
+        async function loadMessages() {
+            try {
+                const response = await fetch(API_URL);
+                if (!response.ok) throw new Error('Error al cargar mensajes');
+                
+                const newMessages = await response.json();
+                const validatedMessages = newMessages.map(msg => ({
+                    id: msg.id,
+                    username: msg.username || 'Anónimo',
+                    text: msg.message || '',
+                    isMine: msg.username === 'Osman'
+                }));
+                
+                if (JSON.stringify(validatedMessages) !== JSON.stringify(messages)) {
+                    messages = validatedMessages;
+                    renderMessages();
+                }
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        }
+
+        async function sendMessage() {
+            const messageText = inputField.value.trim();
+            if (!messageText) return;
+            
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: 'Osman', message: messageText })
+                });
+                
+                if (!response.ok) throw new Error('Error al enviar mensaje');
+                
+                inputField.value = '';
+                updateCharCounter();
+                await loadMessages();
+                messageList.scrollTop = messageList.scrollHeight;
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        }
+
+        function renderMessages() {
+            const fragment = document.createDocumentFragment();           
+            messages.forEach((message, index) => {
+                const messageElement = createMessageElement(message, index);
+                fragment.appendChild(messageElement);
+            });
+            
+            messageList.innerHTML = '';
+            messageList.appendChild(fragment);
+            
+            requestAnimationFrame(() => {
+                animateNewMessages();
+                preserveScroll();
+            });
+        }
+
+        function createMessageElement(message, index) {
+            const messageContainer = document.createElement('div');
+            messageContainer.style.padding = '10px';
+            messageContainer.style.borderRadius = '10px';
+            messageContainer.style.maxWidth = '80%';
+            messageContainer.style.wordWrap = 'break-word';
+
+            if (message.isMine) {
+                messageContainer.style.alignSelf = 'flex-end';
+                messageContainer.style.backgroundColor = isDarkMode ? '#007bff' : '#007bff';
+                messageContainer.style.color = 'white';
+            } else {
+                messageContainer.style.alignSelf = 'flex-start';
+                messageContainer.style.backgroundColor = isDarkMode ? '#333' : '#f0f0f0';
+            }
+            
+            const header = document.createElement('div');
+            header.textContent = message.username;
+            header.style.fontWeight = 'bold';
+            header.style.marginBottom = '5px';
+            
+            if (message.isMine) {
+                const youBadge = document.createElement('span');
+                youBadge.textContent = ' (Me)';
+                youBadge.style.color = isDarkMode ? '#aaa' : '#666';
+                youBadge.style.fontSize = '0.8em';
+                header.appendChild(youBadge);
+            }
+            
+            messageContainer.appendChild(header);
+            
+            const { text, links, images } = processMessageText(message.text);
+            const textElement = document.createElement('div');
+            textElement.textContent = text;
+            messageContainer.appendChild(textElement);
+            
+            images.forEach(imgUrl => {
+                const imgContainer = document.createElement('div');
+                imgContainer.style.marginTop = '10px';
+                
+                const imgPreview = document.createElement('img');
+                imgPreview.src = imgUrl;
+                imgPreview.style.maxWidth = '100%';
+                imgPreview.style.maxHeight = '200px';
+                imgPreview.style.borderRadius = '5px';
+                imgPreview.style.objectFit = 'cover';
+                
+                imgContainer.appendChild(imgPreview);
+                messageContainer.appendChild(imgContainer);
+            });
+            
+            links.forEach(link => {
+                if (!images.includes(link)) {
+                    messageContainer.appendChild(createLinkPreview(link));
+                }
+            });
+            
+            return messageContainer;
+        }
+
+        function animateNewMessages() {
+            const messageElements = messageList.children;
+            if (messageElements.length === 0) return;
+            
+            const animate = (index = 0) => {
+                if (index >= messageElements.length) return;
+                
+                const msg = messageElements[index];
+                msg.style.opacity = '1';
+                msg.style.transform = 'translateY(0)';
+                msg.style.transition = 'opacity 0.3s, transform 0.3s';
+                
+                requestAnimationFrame(() => {
+                    animate(index + 1);
+                });
+            };
+            
+            animate();
+        }
+
+        function processMessageText(text) {
+            if (!text) return { text: '', links: [], images: [] };
+            
+            const urlRegex = /(https?:\/\/[^\s]+)/g;
+            const urls = text.match(urlRegex) || [];
+            const result = { text, links: [], images: [] };
+            
+            urls.forEach(url => {
+                if (/\.(jpeg|jpg|gif|png|webp)$/i.test(url)) {
+                    result.images.push(url);
+                    result.text = result.text.replace(url, '').trim();
+                } else {
+                    result.links.push(url);
+                    result.text = result.text.replace(url, '').trim();
+                }
+            });
+            
+            return result;
+        }
+
+        function createLinkPreview(url) {
+            const previewContainer = document.createElement('div');
+            previewContainer.style.marginTop = '10px';
+            previewContainer.style.border = '1px solid #ddd';
+            previewContainer.style.borderRadius = '5px';
+            previewContainer.style.overflow = 'hidden';
+            
+            const linkAnchor = document.createElement('a');
+            linkAnchor.href = url;
+            linkAnchor.target = '_blank';
+            linkAnchor.style.textDecoration = 'none';
+            linkAnchor.style.color = 'inherit';
+            
+            const title = document.createElement('div');
+            try {
+                title.textContent = 'Enlace: ' + new URL(url).hostname;
+            } catch {
+                title.textContent = 'Enlace externo';
+            }
+            title.style.padding = '8px';
+            title.style.fontWeight = 'bold';
+            title.style.backgroundColor = isDarkMode ? '#444' : '#f8f8f8';
+            
+            const description = document.createElement('div');
+            description.textContent = url;
+            description.style.padding = '8px';
+            description.style.fontSize = '0.9rem';
+            description.style.color = isDarkMode ? '#ccc' : '#666';
+            
+            linkAnchor.appendChild(title);
+            linkAnchor.appendChild(description);
+            previewContainer.appendChild(linkAnchor);
+            
+            return previewContainer;
+        }
+
+        function preserveScroll() {
+            if (!isScrolledUp) {
+                messageList.scrollTop = messageList.scrollHeight;
+            } else {
+                const previousHeight = messageList.scrollHeight;
+                setTimeout(() => {
+                    messageList.scrollTop = lastScrollPosition + (messageList.scrollHeight - previousHeight);
+                }, 0);
+            }
+        }
+
+        function toggleTheme() {
+            isDarkMode = !isDarkMode;
+            localStorage.setItem('darkMode', isDarkMode);
+            applyTheme();
+            
+            const buttons = document.getElementsByTagName('button');
+            for (let btn of buttons) {
+                if (btn.textContent.includes('Mode')) {
+                    btn.textContent = isDarkMode ? 'Light Mode' : 'Dark Mode';
+                }
+            }
+        }
+
+        function applyTheme() {
+            const bgColor = isDarkMode ? '#121212' : '#ffffff';
+            const textColor = isDarkMode ? '#ffffff' : '#000000';
+            
+            document.body.style.backgroundColor = bgColor;
+            document.body.style.color = textColor;
+            
+            const inputs = document.getElementsByTagName('input');
+            for (let input of inputs) {
+                input.style.backgroundColor = isDarkMode ? '#333' : '#fff';
+                input.style.color = isDarkMode ? '#fff' : '#000';
+                input.style.borderColor = isDarkMode ? '#444' : '#ddd';
+            }
+            
+            const buttons = document.getElementsByTagName('button');
+            for (let btn of buttons) {
+                if (!btn.textContent.includes('Mode')) {
+                    btn.style.backgroundColor = '#007bff';
+                    btn.style.color = '#fff';
+                }
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', initChat);
+    </script>
+</body>
+</html>
